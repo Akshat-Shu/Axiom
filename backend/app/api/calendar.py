@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from flask import Blueprint, request, jsonify, current_app
 from marshmallow import ValidationError
 
@@ -14,6 +15,11 @@ _query_schema = EventListQuerySchema()
 
 def _repo():
     return current_app.calendar_repo
+
+
+def _naive(dt: datetime) -> datetime:
+    """Drop tzinfo so naive (SQLite) and aware datetimes can be compared safely."""
+    return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
 
 
 @bp.get("/events")
@@ -42,6 +48,13 @@ def create_event():
     except ValidationError as err:
         return jsonify({"errors": err.messages}), 422
 
+    conflicts = _repo().find_overlapping_events(user_id, data["start_time"], data["end_time"])
+    if conflicts:
+        return jsonify({
+            "error": "Event overlaps an existing event",
+            "conflicts": conflicts,
+        }), 409
+
     event = _repo().create_event(
         user_id=user_id,
         title=data["title"],
@@ -68,6 +81,22 @@ def update_event(event_id: str):
         data = _update_schema.load(request.get_json(force=True) or {})
     except ValidationError as err:
         return jsonify({"errors": err.messages}), 422
+
+    existing = _repo().get_event(event_id)
+    if not existing:
+        return jsonify({"error": "Event not found"}), 404
+
+    # If the time window is changing, reject any overlap with OTHER events.
+    if "start_time" in data or "end_time" in data:
+        new_start = data.get("start_time") or datetime.fromisoformat(existing["start_time"])
+        new_end = data.get("end_time") or datetime.fromisoformat(existing["end_time"])
+        if _naive(new_end) <= _naive(new_start):
+            return jsonify({"error": "end_time must be after start_time"}), 422
+        conflicts = _repo().find_overlapping_events(
+            existing["user_id"], new_start, new_end, exclude_event_id=event_id
+        )
+        if conflicts:
+            return jsonify({"error": "Event overlaps an existing event", "conflicts": conflicts}), 409
 
     try:
         event = _repo().update_event(event_id, **data)

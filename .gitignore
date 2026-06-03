@@ -1,0 +1,43 @@
+# ── Secrets & environment ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Flask / SQLAlchemy ────────────────────────────────────────────────────────
+instance/
+*.db
+*.sqlite
+*.sqlite3
+backend/migrations/versions/*.pyc
+
+# ── React build ───────────────────────────────────────────────────────────────
+frontend/build/
+frontend/node_modules/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── OS & editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ── AWS / boto ────────────────────────────────────────────────────────────────
+.aws/

@@ -88,8 +88,10 @@ def _wire_dependencies(app: Flask, cfg) -> None:
     from app.services.llm_openrouter import OpenRouterLLMService
     from app.repositories.knowledge_postgres import PostgreSQLKnowledgeRepository
     from app.repositories.calendar_postgres import PostgreSQLCalendarRepository
+    from app.repositories.user_postgres import PostgreSQLUserRepository
     from app.engines.knowledge_engine import KnowledgeEngine
     from app.engines.scheduling_engine import SchedulingEngine
+    from app.engines.calendar_engine import CalendarEngine
 
     # --- Concrete implementations (low-level modules) ---
     storage_service = S3StorageService(
@@ -102,6 +104,7 @@ def _wire_dependencies(app: Flask, cfg) -> None:
     )
     knowledge_repo = PostgreSQLKnowledgeRepository()
     calendar_repo = PostgreSQLCalendarRepository()
+    user_repo = PostgreSQLUserRepository()
 
     # --- High-level engines (depend only on abstractions) ---
     knowledge_engine = KnowledgeEngine(
@@ -115,12 +118,15 @@ def _wire_dependencies(app: Flask, cfg) -> None:
         calendar_repo=calendar_repo,
         knowledge_repo=knowledge_repo,
     )
+    calendar_engine = CalendarEngine(repo=calendar_repo)
 
     # Attach to app for access from blueprints via current_app
     app.llm_service = llm_service
     app.knowledge_engine = knowledge_engine
     app.scheduling_engine = scheduling_engine
+    app.calendar_engine = calendar_engine
     app.calendar_repo = calendar_repo
+    app.user_repo = user_repo
 
     app.logger.info("Dependency injection complete")
 

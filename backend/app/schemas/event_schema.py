@@ -14,7 +14,7 @@ class EventCreateSchema(Schema):
     def validate_time_range(self, data, **kwargs):
         if data.get("start_time") and data.get("end_time"):
             if data["end_time"] <= data["start_time"]:
-                raise ValidationError("end_time must be after start_time")
+                raise ValidationError("End time must be after the start time.")
 
 
 class EventUpdateSchema(Schema):
@@ -29,7 +29,7 @@ class EventUpdateSchema(Schema):
     def validate_time_range(self, data, **kwargs):
         if data.get("start_time") and data.get("end_time"):
             if data["end_time"] <= data["start_time"]:
-                raise ValidationError("end_time must be after start_time")
+                raise ValidationError("End time must be after the start time.")
 
 
 class EventListQuerySchema(Schema):

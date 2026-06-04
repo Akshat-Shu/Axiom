@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from app.extensions import db
+from app.time_utils import iso_utc
 
 
 class Topic(db.Model):
@@ -39,6 +40,6 @@ class Topic(db.Model):
             "content_summary": self.content_summary,
             "file_key": self.file_key,
             "decay_score": round(self.decay_score, 4),
-            "created_at": self.created_at.isoformat(),
-            "last_reviewed_at": self.last_reviewed_at.isoformat() if self.last_reviewed_at else None,
+            "created_at": iso_utc(self.created_at),
+            "last_reviewed_at": iso_utc(self.last_reviewed_at),
         }

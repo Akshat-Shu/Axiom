@@ -5,6 +5,7 @@ from typing import Optional
 from app.extensions import db
 from app.interfaces.calendar_repository import CalendarRepository
 from app.models import Event, ScheduleProposal
+from app.time_utils import to_utc_naive
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +27,8 @@ class PostgreSQLCalendarRepository(CalendarRepository):
             user_id=user_id,
             title=title,
             description=description,
-            start_time=start_time,
-            end_time=end_time,
+            start_time=to_utc_naive(start_time),
+            end_time=to_utc_naive(end_time),
             priority=priority,
             is_flexible=is_flexible,
         )
@@ -55,9 +56,11 @@ class PostgreSQLCalendarRepository(CalendarRepository):
         event = db.session.get(Event, event_id)
         if not event:
             raise ValueError(f"Event {event_id} not found")
-        allowed = {"title", "description", "start_time", "end_time", "priority", "is_flexible"}
+        allowed = {"title", "description", "start_time", "end_time", "priority", "is_flexible", "completed"}
         for key, value in fields.items():
             if key in allowed:
+                if key in ("start_time", "end_time"):
+                    value = to_utc_naive(value)
                 setattr(event, key, value)
         db.session.commit()
         return event.to_dict()
@@ -69,6 +72,7 @@ class PostgreSQLCalendarRepository(CalendarRepository):
             db.session.commit()
 
     def get_flexible_slots(self, user_id: str, after: datetime, limit: int = 10) -> list[dict]:
+        after = to_utc_naive(after)
         events = (
             db.session.query(Event)
             .filter(
@@ -91,6 +95,7 @@ class PostgreSQLCalendarRepository(CalendarRepository):
     ) -> list[dict]:
         # Half-open overlap: existing.start < end AND existing.end > start.
         # Touching edges (existing.end == start, or existing.start == end) do not overlap.
+        start, end = to_utc_naive(start), to_utc_naive(end)
         query = db.session.query(Event).filter(
             Event.user_id == user_id,
             Event.start_time < end,

@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from app.extensions import db
+from app.time_utils import iso_utc
 
 
 class User(db.Model):
@@ -21,5 +22,5 @@ class User(db.Model):
             "id": self.id,
             "email": self.email,
             "username": self.username,
-            "created_at": self.created_at.isoformat(),
+            "created_at": iso_utc(self.created_at),
         }

@@ -8,7 +8,8 @@ const SNAP_MIN = 15;        // drag snaps to 15-minute increments
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 
 // ── date helpers ──────────────────────────────────────────────────────────────
-const toInput = (d) => format(d, "yyyy-MM-dd'T'HH:mm");           // for datetime-local
+const toInput = (d) => format(d, "yyyy-MM-dd'T'HH:mm");           // Date -> local datetime-local value
+const toUtcIso = (localStr) => new Date(localStr).toISOString();  // local datetime-local value -> UTC ISO for the API
 const minutesOfDay = (d) => d.getHours() * 60 + d.getMinutes();
 const dayAtMinutes = (day, mins) => {
   const d = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0, 0);
@@ -56,7 +57,20 @@ export default function Calendar({ userId, service = calendarService }) {
   const days = useMemo(() => HOURS.length && Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
 
   const load = async () => {
-    try { const { data } = await service.listEvents(userId); setEvents(data); } catch (e) {}
+    try {
+      const { data } = await service.listEvents(userId);
+      setEvents(data);
+      // The backend's auto-complete sweep compares in UTC, but events are shown in the
+      // user's local time. Use the local clock (what the user sees) as the source of truth:
+      // complete any event whose end has passed locally but isn't flagged done yet. This
+      // keeps the green state in sync and triggers the linked-topic decay reset.
+      const stale = data.filter((e) => !e.completed && new Date(e.end_time) < new Date());
+      if (stale.length) {
+        await Promise.all(stale.map((e) => service.completeEvent(e.id, userId)));
+        const { data: fresh } = await service.listEvents(userId);
+        setEvents(fresh);
+      }
+    } catch (e) {}
   };
 
   useEffect(() => {
@@ -95,7 +109,7 @@ export default function Calendar({ userId, service = calendarService }) {
     const newStart = dayAtMinutes(day, mins);
     const newEnd = dayAtMinutes(day, mins + drag.durationMin);
     setDrag(null);
-    const result = await service.updateEvent(drag.id, { start_time: toInput(newStart), end_time: toInput(newEnd) });
+    const result = await service.updateEvent(drag.id, { start_time: newStart.toISOString(), end_time: newEnd.toISOString() });
     if (!result.ok) showBanner({ message: result.message, conflicts: result.conflicts });
     load();
   };
@@ -122,7 +136,7 @@ export default function Calendar({ userId, service = calendarService }) {
   const saveModal = async (e) => {
     e.preventDefault();
     const f = modal.form;
-    const payload = { ...f, priority: Number(f.priority) };
+    const payload = { ...f, priority: Number(f.priority), start_time: toUtcIso(f.start_time), end_time: toUtcIso(f.end_time) };
     const result = modal.mode === "create"
       ? await service.createEvent(userId, payload)
       : await service.updateEvent(modal.id, payload);
@@ -224,7 +238,8 @@ export default function Calendar({ userId, service = calendarService }) {
                 {isToday(day) && <div style={s.nowLine((minutesOfDay(nowTick) / 60) * HOUR_H)} />}
 
                 {eventsByDay[di].map(({ ev, s: startMin, e: endMin, col, cols }) => {
-                  const color = priorityColor(ev.priority);
+                  const done = ev.completed || new Date(ev.end_time) < nowTick;
+                  const color = done ? theme.success : priorityColor(ev.priority);
                   const top = (startMin / 60) * HOUR_H;
                   const height = Math.max(18, ((endMin - startMin) / 60) * HOUR_H - 2);
                   const width = `calc(${100 / cols}% - 5px)`;
@@ -233,23 +248,25 @@ export default function Calendar({ userId, service = calendarService }) {
                   return (
                     <div
                       key={ev.id}
-                      draggable
+                      draggable={!done}
                       onDragStart={(e) => {
+                        if (done) { e.preventDefault(); return; }
                         setDrag({ id: ev.id, durationMin: endMin - startMin, grabOffset: e.nativeEvent.offsetY });
                         e.dataTransfer.effectAllowed = "move";
                       }}
                       onDragEnd={() => setDrag(null)}
                       onClick={(e) => { e.stopPropagation(); openEdit(ev); }}
-                      title={`${ev.title} — click to edit, drag to reschedule`}
+                      title={done ? `${ev.title} — completed` : `${ev.title} — click to edit, drag to reschedule`}
                       style={{
                         position: "absolute", top, height, left, width,
                         background: `${color}26`, borderLeft: `3px solid ${color}`, borderRadius: 6,
-                        padding: "3px 6px", overflow: "hidden", cursor: "grab", zIndex: 2,
+                        padding: "3px 6px", overflow: "hidden", cursor: done ? "pointer" : "grab", zIndex: 2,
                         fontSize: 11.5, color: theme.text, boxSizing: "border-box",
+                        opacity: done ? 0.85 : 1,
                       }}
                     >
-                      <div style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {isReview ? "★ " : ""}{ev.title}
+                      <div style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: done ? "line-through" : "none" }}>
+                        {done ? "✓ " : isReview ? "★ " : ""}{ev.title}
                       </div>
                       <div style={{ fontSize: 10, color: theme.textMuted }}>
                         {format(new Date(ev.start_time), "h:mm")}–{format(new Date(ev.end_time), "h:mm a")}
@@ -312,7 +329,7 @@ export default function Calendar({ userId, service = calendarService }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
               <div style={{ display: "flex", gap: 8 }}>
                 {modal.mode === "edit" && <button type="button" style={s.ghostBtn(theme.danger)} onClick={removeEvent}>Delete</button>}
-                {modal.mode === "edit" && modal.ev?.description?.includes("Axiom") && (
+                {modal.mode === "edit" && !modal.ev?.completed && (
                   <button type="button" style={s.btn(theme.success)} onClick={completeEvent}>✓ Complete</button>
                 )}
               </div>

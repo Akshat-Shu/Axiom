@@ -32,6 +32,9 @@ def list_events():
     except ValidationError as err:
         return jsonify({"errors": err.messages}), 422
 
+    # Auto-complete any events whose end time has passed (and reset linked decay).
+    current_app.scheduling_engine.reconcile_completions(user_id)
+
     events = _repo().list_events(user_id, start=query.get("start"), end=query.get("end"))
     return jsonify(events)
 
@@ -100,27 +103,19 @@ def delete_event(event_id: str):
 @bp.post("/events/<event_id>/complete")
 def complete_event(event_id: str):
     """
-    Mark a review event as completed: record a review for the linked topic,
-    resetting its decay to 0%, then delete the event from the calendar.
+    Mark an event completed (it turns green on the calendar). If the event is a
+    review session linked to a knowledge topic, that topic's decay is reset to 0.
     """
     user_id = request.args.get("user_id")
     if not user_id:
         return jsonify({"error": "user_id query parameter is required"}), 400
 
-    event = _repo().get_event(event_id)
-    if not event:
-        return jsonify({"error": "Event not found"}), 404
+    try:
+        event = current_app.scheduling_engine.complete_event(event_id, user_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
 
-    proposal = _repo().get_proposal_by_event_id(event_id)
-    if not proposal:
-        return jsonify({"error": "No review topic linked to this event"}), 404
-
-    topic_id = proposal["topic_id"]
-    current_app.knowledge_engine._repo.record_review(topic_id, user_id, duration_minutes=60)
-    _repo().delete_event(event_id)
-
-    logger.info("Completed review for topic %s via event %s", topic_id, event_id)
-    return jsonify({"topic_id": topic_id, "message": "Review recorded and event removed"})
+    return jsonify(event)
 
 
 @bp.get("/flexible-slots")

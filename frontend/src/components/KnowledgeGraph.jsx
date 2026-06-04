@@ -1,7 +1,7 @@
 import React, { useEffect, useCallback } from "react";
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState } from "reactflow";
 import "reactflow/dist/style.css";
-import { getKnowledgeGraph, recalculateDecay, deleteTopic } from "../api/client";
+import { getKnowledgeGraph, recalculateDecay, deleteTopic, recordReview } from "../api/client";
 import { useTheme } from "../theme";
 
 function decayColor(score) {
@@ -25,6 +25,7 @@ export default function KnowledgeGraph({ userId }) {
   const [loading, setLoading] = React.useState(false);
   const [selectedNode, setSelectedNode] = React.useState(null);
   const [deleting, setDeleting] = React.useState(false);
+  const [reviewing, setReviewing] = React.useState(false);
 
   const loadGraph = useCallback(async () => {
     setLoading(true);
@@ -72,6 +73,19 @@ export default function KnowledgeGraph({ userId }) {
     setSelectedNode((prev) => prev?.id === node.id ? null : node);
   }, []);
 
+  const handleReviewSelected = useCallback(async () => {
+    if (!selectedNode) return;
+    setReviewing(true);
+    try {
+      await recordReview(selectedNode.id, userId);   // resets decay to 0, stamps last_reviewed
+      await loadGraph();                              // refresh so the node turns green / 0%
+    } catch (err) {
+      console.error("Mark reviewed failed", err);
+    } finally {
+      setReviewing(false);
+    }
+  }, [selectedNode, userId, loadGraph]);
+
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNode) return;
     setDeleting(true);
@@ -101,6 +115,16 @@ export default function KnowledgeGraph({ userId }) {
         </div>
       )}
       <div style={{ position: "absolute", top: 12, right: 12, zIndex: 10, display: "flex", gap: 8 }}>
+        {selectedNode && (
+          <button
+            onClick={handleReviewSelected}
+            disabled={reviewing}
+            title="Mark this topic as reviewed — resets its decay to 0%"
+            style={{ background: theme.success, border: "none", color: "#fff", padding: "6px 14px", borderRadius: 6, cursor: reviewing ? "not-allowed" : "pointer", fontSize: 13, opacity: reviewing ? 0.7 : 1 }}
+          >
+            {reviewing ? "Marking…" : "✓ Mark reviewed"}
+          </button>
+        )}
         {selectedNode && (
           <button
             onClick={handleDeleteSelected}

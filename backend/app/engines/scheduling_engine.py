@@ -178,6 +178,47 @@ class SchedulingEngine:
         logger.info("Declined proposal %s", proposal_id)
         return updated
 
+    # ------------------------------------------------------------------ #
+    # Completion: when an event's end time passes (or the user marks it done)
+    # the event is flagged completed; if it is a review session linked to a
+    # knowledge topic, that topic's decay is reset to 0.
+    # ------------------------------------------------------------------ #
+    def reconcile_completions(self, user_id: str) -> list[str]:
+        """
+        Mark every past-end, not-yet-completed event for the user as completed,
+        resetting the decay of any linked topic. Returns the ids just completed.
+        Idempotent: already-completed events are skipped, so decay is reset once.
+        """
+        now = datetime.now(timezone.utc)
+        completed_ids = []
+        for ev in self._calendar_repo.list_events(user_id, start=None, end=None):
+            if ev.get("completed"):
+                continue
+            if self._parse_iso(ev["end_time"]) <= now:
+                self._complete_event(ev, user_id)
+                completed_ids.append(ev["id"])
+        if completed_ids:
+            logger.info("Auto-completed %d past event(s) for user %s", len(completed_ids), user_id)
+        return completed_ids
+
+    def complete_event(self, event_id: str, user_id: str) -> dict:
+        """Explicitly mark a single event completed (and reset linked decay)."""
+        ev = self._calendar_repo.get_event(event_id)
+        if not ev:
+            raise ValueError(f"Event {event_id} not found")
+        self._complete_event(ev, user_id)
+        return self._calendar_repo.get_event(event_id)
+
+    def _complete_event(self, ev: dict, user_id: str) -> None:
+        self._calendar_repo.update_event(ev["id"], completed=True)
+        proposal = self._calendar_repo.get_proposal_by_event_id(ev["id"])
+        if proposal:
+            start = self._parse_iso(ev["start_time"])
+            end = self._parse_iso(ev["end_time"])
+            duration = max(1, int((end - start).total_seconds() // 60))
+            self._knowledge_repo.record_review(proposal["topic_id"], user_id, duration_minutes=duration)
+            logger.info("Completed review event %s → reset decay for topic %s", ev["id"], proposal["topic_id"])
+
     def _negotiate_slot(self, user_id: str, topic: dict, flexible_slots: list[dict], start_after: datetime | None = None) -> dict | None:
         user_message = (
             f"Topic needing review:\n"

@@ -20,6 +20,7 @@ def analyze():
 
     threshold = float(request.args.get("threshold", 0.3))
 
+    _engine().reconcile_completions(user_id)
     current_app.knowledge_engine.recalculate_decay(user_id)
 
     try:

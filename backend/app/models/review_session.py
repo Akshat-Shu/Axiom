@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from app.extensions import db
+from app.time_utils import iso_utc
 
 
 class ReviewSession(db.Model):
@@ -24,6 +25,6 @@ class ReviewSession(db.Model):
             "id": self.id,
             "user_id": self.user_id,
             "topic_id": self.topic_id,
-            "reviewed_at": self.reviewed_at.isoformat(),
+            "reviewed_at": iso_utc(self.reviewed_at),
             "duration_minutes": self.duration_minutes,
         }

@@ -94,6 +94,9 @@ def recalculate_decay():
     user_id = request.args.get("user_id")
     if not user_id:
         return jsonify({"error": "user_id query parameter is required"}), 400
+    # Complete any past-due review sessions first (resetting their topics' decay)
+    # so the graph reflects finished reviews regardless of which tab is open.
+    current_app.scheduling_engine.reconcile_completions(user_id)
     topics = _engine().recalculate_decay(user_id)
     return jsonify({"updated": len(topics), "topics": topics})
 

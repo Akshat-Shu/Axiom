@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify, current_app
 from marshmallow import ValidationError
 
 from app.schemas.event_schema import EventCreateSchema, EventUpdateSchema, EventListQuerySchema
+from app.exceptions import EventConflictError
 
 bp = Blueprint("calendar", __name__, url_prefix="/api/calendar")
 logger = logging.getLogger(__name__)
@@ -10,6 +11,10 @@ logger = logging.getLogger(__name__)
 _create_schema = EventCreateSchema()
 _update_schema = EventUpdateSchema()
 _query_schema = EventListQuerySchema()
+
+
+def _engine():
+    return current_app.calendar_engine
 
 
 def _repo():
@@ -42,15 +47,19 @@ def create_event():
     except ValidationError as err:
         return jsonify({"errors": err.messages}), 422
 
-    event = _repo().create_event(
-        user_id=user_id,
-        title=data["title"],
-        description=data.get("description", ""),
-        start_time=data["start_time"],
-        end_time=data["end_time"],
-        priority=data["priority"],
-        is_flexible=data["is_flexible"],
-    )
+    try:
+        event = _engine().create_event(
+            user_id=user_id,
+            title=data["title"],
+            description=data.get("description", ""),
+            start_time=data["start_time"],
+            end_time=data["end_time"],
+            priority=data["priority"],
+            is_flexible=data["is_flexible"],
+        )
+    except EventConflictError as exc:
+        return jsonify({"error": str(exc), "conflicts": exc.conflicts}), 409
+
     return jsonify(event), 201
 
 
@@ -70,7 +79,9 @@ def update_event(event_id: str):
         return jsonify({"errors": err.messages}), 422
 
     try:
-        event = _repo().update_event(event_id, **data)
+        event = _engine().update_event(event_id, **data)
+    except EventConflictError as exc:
+        return jsonify({"error": str(exc), "conflicts": exc.conflicts}), 409
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 404
 

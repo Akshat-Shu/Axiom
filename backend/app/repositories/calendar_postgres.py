@@ -82,6 +82,24 @@ class PostgreSQLCalendarRepository(CalendarRepository):
         )
         return [e.to_dict() for e in events]
 
+    def find_overlapping_events(
+        self,
+        user_id: str,
+        start: datetime,
+        end: datetime,
+        exclude_event_id: Optional[str] = None,
+    ) -> list[dict]:
+        # Half-open overlap: existing.start < end AND existing.end > start.
+        # Touching edges (existing.end == start, or existing.start == end) do not overlap.
+        query = db.session.query(Event).filter(
+            Event.user_id == user_id,
+            Event.start_time < end,
+            Event.end_time > start,
+        )
+        if exclude_event_id is not None:
+            query = query.filter(Event.id != exclude_event_id)
+        return [e.to_dict() for e in query.order_by(Event.start_time.asc()).all()]
+
     def create_proposal(
         self,
         user_id: str,

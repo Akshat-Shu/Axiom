@@ -1,6 +1,8 @@
 import logging
 from flask import Blueprint, request, jsonify, current_app
 
+from app.exceptions import EventConflictError
+
 bp = Blueprint("scheduling", __name__, url_prefix="/api/scheduling")
 logger = logging.getLogger(__name__)
 
@@ -44,6 +46,8 @@ def list_proposals():
 def accept_proposal(proposal_id: str):
     try:
         proposal = _engine().accept_proposal(proposal_id)
+    except EventConflictError as exc:
+        return jsonify({"error": str(exc), "conflicts": exc.conflicts}), 409
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
@@ -90,6 +94,8 @@ def apply_proposal(proposal_id: str):
     try:
         proposal = _engine().apply_proposal_changes(proposal_id, changes=data.get("changes", []))
         return jsonify(proposal)
+    except EventConflictError as exc:
+        return jsonify({"error": str(exc), "conflicts": exc.conflicts}), 409
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:

@@ -44,6 +44,24 @@ class CalendarRepository(ABC):
         pass
 
     @abstractmethod
+    def find_overlapping_events(
+        self,
+        user_id: str,
+        start: datetime,
+        end: datetime,
+        exclude_event_id: Optional[str] = None,
+    ) -> list[dict]:
+        """
+        Return events for the user whose time range overlaps [start, end).
+
+        Two intervals overlap iff existing.start < end AND existing.end > start
+        (touching edges, where one ends exactly as the other begins, do NOT
+        count as an overlap). Pass exclude_event_id to ignore a specific event
+        — e.g. when checking whether an event can be moved onto its own slot.
+        """
+        pass
+
+    @abstractmethod
     def create_proposal(
         self,
         user_id: str,

@@ -13,6 +13,7 @@ class Topic(db.Model):
     content_summary = db.Column(db.Text, nullable=True)
     file_key = db.Column(db.String(512), nullable=True)
     decay_score = db.Column(db.Float, nullable=False, default=0.0)
+    half_life_days = db.Column(db.Float, nullable=False, default=14.0)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     last_reviewed_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
@@ -40,6 +41,7 @@ class Topic(db.Model):
             "content_summary": self.content_summary,
             "file_key": self.file_key,
             "decay_score": round(self.decay_score, 4),
+            "half_life_days": self.half_life_days,
             "created_at": iso_utc(self.created_at),
             "last_reviewed_at": iso_utc(self.last_reviewed_at),
         }

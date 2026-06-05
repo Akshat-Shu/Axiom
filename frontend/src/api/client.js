@@ -15,9 +15,10 @@ api.interceptors.response.use(
 );
 
 // ── Knowledge ────────────────────────────────────────────────────────────────
-export const uploadDocument = (userId, file) => {
+export const uploadDocument = (userId, file, halfLifeDays) => {
   const form = new FormData();
   form.append("file", file);
+  if (halfLifeDays != null) form.append("half_life_days", String(halfLifeDays));
   return api.post(`/knowledge/upload?user_id=${userId}`, form, {
     headers: { "Content-Type": "multipart/form-data" },
   });

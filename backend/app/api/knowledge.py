@@ -30,12 +30,21 @@ def upload_document():
     if not raw_bytes:
         return jsonify({"error": "Uploaded file is empty"}), 400
 
+    half_life_raw = request.form.get("half_life_days")
+    try:
+        half_life_days = float(half_life_raw) if half_life_raw else None
+        if half_life_days is not None and half_life_days <= 0:
+            return jsonify({"error": "half_life_days must be positive"}), 400
+    except ValueError:
+        return jsonify({"error": "half_life_days must be a number"}), 400
+
     try:
         topic = _engine().ingest_document(
             user_id=user_id,
             filename=file.filename,
             raw_bytes=raw_bytes,
             content_type=file.content_type or "application/octet-stream",
+            half_life_days=half_life_days,
         )
     except Exception as exc:
         logger.exception("Document ingestion failed")

@@ -68,11 +68,12 @@ class KnowledgeEngine:
         self._repo = repo
         self._half_life_days = half_life_days
 
-    def ingest_document(self, user_id: str, filename: str, raw_bytes: bytes, content_type: str) -> dict:
+    def ingest_document(self, user_id: str, filename: str, raw_bytes: bytes, content_type: str, half_life_days: float = None) -> dict:
         """
         Upload the raw file to storage, extract topics via LLM, persist to DB.
         Returns the created primary topic dict.
         """
+        effective_half_life = half_life_days if half_life_days is not None else self._half_life_days
         file_key = f"uploads/{user_id}/{uuid.uuid4()}/{filename}"
         self._storage.upload(file_key, raw_bytes, content_type)
         logger.info("Stored document at key %s", file_key)
@@ -99,6 +100,7 @@ class KnowledgeEngine:
             title=extraction.get("primary_title", filename),
             content_summary=extraction.get("summary", ""),
             file_key=file_key,
+            half_life_days=effective_half_life,
         )
 
         topic_id_map: dict[str, str] = {primary["title"]: primary["id"]}
@@ -109,6 +111,7 @@ class KnowledgeEngine:
                 title=sub.get("title", "Unnamed"),
                 content_summary=sub.get("summary", ""),
                 file_key=None,
+                half_life_days=effective_half_life,
             )
             topic_id_map[sub_topic["title"]] = sub_topic["id"]
 
@@ -146,7 +149,8 @@ class KnowledgeEngine:
                 created_at = _as_utc(datetime.fromisoformat(topic["created_at"]))
                 days_elapsed = (now - created_at).total_seconds() / 86400
 
-            decay = 1.0 - math.exp(-math.log(2) * days_elapsed / self._half_life_days)
+            topic_half_life = topic.get("half_life_days") or self._half_life_days
+            decay = 1.0 - math.exp(-math.log(2) * days_elapsed / topic_half_life)
             decay = round(min(1.0, max(0.0, decay)), 4)
             self._repo.update_decay_score(topic["id"], decay)
             topic["decay_score"] = decay

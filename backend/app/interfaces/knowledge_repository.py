@@ -10,7 +10,7 @@ class KnowledgeRepository(ABC):
     """
 
     @abstractmethod
-    def create_topic(self, user_id: str, title: str, content_summary: str, file_key: Optional[str]) -> dict:
+    def create_topic(self, user_id: str, title: str, content_summary: str, file_key: Optional[str], half_life_days: float = 14.0) -> dict:
         pass
 
     @abstractmethod

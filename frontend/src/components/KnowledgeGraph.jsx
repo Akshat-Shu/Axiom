@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from "react";
+import React, { useEffect, useCallback, useRef } from "react";
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState } from "reactflow";
 import "reactflow/dist/style.css";
 import { getKnowledgeGraph, recalculateDecay, deleteTopic, recordReview } from "../api/client";
@@ -20,6 +20,9 @@ const LEGEND = [
 
 export default function KnowledgeGraph({ userId }) {
   const { theme, isDark } = useTheme();
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
+
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [loading, setLoading] = React.useState(false);
@@ -27,21 +30,25 @@ export default function KnowledgeGraph({ userId }) {
   const [deleting, setDeleting] = React.useState(false);
   const [reviewing, setReviewing] = React.useState(false);
 
+  const refreshDecay = useCallback(() => {
+    recalculateDecay(userId).catch((err) => console.error("Decay recalc failed", err));
+  }, [userId]);
+
   const loadGraph = useCallback(async () => {
     setLoading(true);
     try {
-      await recalculateDecay(userId);
       const { data } = await getKnowledgeGraph(userId);
+      const t = themeRef.current;
 
       setNodes(data.nodes.map((n, i) => ({
         id: n.id,
         data: { label: `${n.label}\n${(n.decay_score * 100).toFixed(0)}% decay` },
         position: { x: (i % 4) * 230 + 40, y: Math.floor(i / 4) * 170 + 40 },
         style: {
-          background: theme.surfaceAlt,
+          background: t.surfaceAlt,
           border: `2px solid ${decayColor(n.decay_score)}`,
           borderRadius: 10,
-          color: theme.text,
+          color: t.text,
           fontSize: 13,
           padding: "10px 14px",
           whiteSpace: "pre-wrap",
@@ -58,8 +65,8 @@ export default function KnowledgeGraph({ userId }) {
         source: e.source,
         target: e.target,
         label: e.type,
-        style: { stroke: theme.border, strokeWidth: 1.5 },
-        labelStyle: { fill: theme.textMuted, fontSize: 10 },
+        style: { stroke: t.border, strokeWidth: 1.5 },
+        labelStyle: { fill: t.textMuted, fontSize: 10 },
         type: "smoothstep",
       })));
     } catch (err) {
@@ -67,7 +74,7 @@ export default function KnowledgeGraph({ userId }) {
     } finally {
       setLoading(false);
     }
-  }, [userId, theme]);
+  }, [userId]);
 
   const handleNodeClick = useCallback((_, node) => {
     setSelectedNode((prev) => prev?.id === node.id ? null : node);
@@ -77,8 +84,8 @@ export default function KnowledgeGraph({ userId }) {
     if (!selectedNode) return;
     setReviewing(true);
     try {
-      await recordReview(selectedNode.id, userId);   // resets decay to 0, stamps last_reviewed
-      await loadGraph();                              // refresh so the node turns green / 0%
+      await recordReview(selectedNode.id, userId);
+      await loadGraph();
     } catch (err) {
       console.error("Mark reviewed failed", err);
     } finally {
@@ -102,10 +109,11 @@ export default function KnowledgeGraph({ userId }) {
   }, [selectedNode, setNodes, setEdges]);
 
   useEffect(() => {
+    refreshDecay();
     loadGraph();
-    const id = setInterval(loadGraph, 30000);
+    const id = setInterval(() => { refreshDecay(); loadGraph(); }, 30000);
     return () => clearInterval(id);
-  }, [loadGraph]);
+  }, [loadGraph, refreshDecay]);
 
   return (
     <div style={{ width: "100%", height: "100%", position: "relative", background: theme.bg }}>

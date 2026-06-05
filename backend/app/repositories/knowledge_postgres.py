@@ -12,12 +12,13 @@ logger = logging.getLogger(__name__)
 class PostgreSQLKnowledgeRepository(KnowledgeRepository):
     """Concrete KnowledgeRepository backed by PostgreSQL via SQLAlchemy."""
 
-    def create_topic(self, user_id: str, title: str, content_summary: str, file_key: Optional[str]) -> dict:
+    def create_topic(self, user_id: str, title: str, content_summary: str, file_key: Optional[str], half_life_days: float = 14.0) -> dict:
         topic = Topic(
             user_id=user_id,
             title=title,
             content_summary=content_summary,
             file_key=file_key,
+            half_life_days=half_life_days,
         )
         db.session.add(topic)
         db.session.commit()
